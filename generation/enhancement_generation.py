@@ -3,15 +3,8 @@ import json
 import re
 
 
-NEW_TOPIC = "New Topic"
-
-RELATIONS = {
-    "Constraint Refinement": "Ask for the same type of entity as the previous question with a different constraint.",
-    "Topic Exploration": "Ask for other properties about the same entity as the previous question.",
-    "Participant Shift": "Ask for the same property about another entity.",
-    "Answer Exploration": "Ask for a subset of entities from a previous question's answer or inquire about a specific entity mentioned in the answer.",
-    NEW_TOPIC: "The question does not continue the previous conversational flow and introduces an unrelated information need.",
-}
+NEW_TOPIC = "new_topic"
+OLD_TOPIC = "old_topic"
 
 # QD keeps its original base instruction; final rewriting now preserves full questions.
 # RE (explain_response), PR (single_response/multi_response), and HS
@@ -30,8 +23,9 @@ PROMPT_DICT = {
         The output should be placed in a JSON dictionary as follow: {"query": ""}
     """,
     "new_topic": """
-        Given a series of previous questions, along with a new question, your task is to
-        classify the relation using exactly one of the five categories below.
+        Given a series of previous questions, along with a new question, your task is to determine whether
+        the new question continues the discussion on an existing topic or introduces a new topic.
+        Classify it as either "old_topic" or "new_topic".
     """,
 }
 PROMPT_DICT = {k: re.sub(r"\s+", " ", v).strip() + "\n\n" for k, v in PROMPT_DICT.items()}
@@ -49,7 +43,7 @@ PRESERVE_CONTEXT = (
     "(such as mean or quartile), grouping, ranking, units, filters, and exclusions. "
     "Silence about a condition does not remove it. Use the latest applicable value for each condition; "
     "do not reintroduce superseded values or carry a condition that is incompatible with the current request. "
-    "For Participant Shift, change only the specified entity at its stated scope (for example, the process), "
+    "When the question changes an entity, change only that entity at its stated scope (for example, the process), "
     "while preserving the other applicable conditions (such as date, line, metric, and aggregation). "
     "Keep identifiers and numeric values as supplied. Output a complete natural-language question, "
     "including the request wording; do not compress it into keywords or omit details for brevity.\n\n"
@@ -88,40 +82,33 @@ def classify_relation(history, question, generate):
     validate_questions(history, question)
     if not history:
         return {"topic": "new_topic", "relation": NEW_TOPIC, "needs_clarification": False, "reason": "First question; no previous flow."}
-    categories = "\n".join(f"- {key}: {value}" for key, value in RELATIONS.items())
-    prompt = PROMPT_DICT["new_topic"] + categories + "\n\n" + GROUNDING + "\n" + (
-        'Return only JSON: {"relation": exactly one category above, '
+    prompt = PROMPT_DICT["new_topic"] + GROUNDING + "\n" + (
+        'Return only JSON: {"topic": "old_topic" or "new_topic", '
         '"needs_clarification": true or false, "reason": "short explanation"}. '
-        'Use "New Topic" for a question unrelated to the previous flow. Do not return a null relation. '
+        'Use "old_topic" when the question continues or modifies the existing information need, '
+        'including changes to conditions, properties, or entities, or references to previous results. '
+        'Use "new_topic" for an unrelated information need. '
         "Use the full question history to resolve ellipsis. "
-        'A different named entity with the same property is Participant Shift, not New Topic. '
-        'An unresolved reference to a previous answer is Answer Exploration, not New Topic. '
-        "Answer Exploration includes references to prior results, even though those results are unavailable. "
+        "A reference that cannot be resolved does not by itself indicate a new topic. "
         "Set needs_clarification to true if a reference cannot be resolved from questions alone "
         "(for example 'the first one' in an unseen answer), or if the intended antecedent is ambiguous. "
         "An explicitly named entity can be resolved without an answer.\n\n"
     ) + context(history, question)
     result = parse_json(generate(prompt))
-    if not {"relation", "needs_clarification", "reason"}.issubset(result):
+    if not {"topic", "needs_clarification", "reason"}.issubset(result):
         raise ValueError("TS output is missing required fields.")
-    relation = result.get("relation")
-    if not isinstance(relation, str) or relation not in RELATIONS:
-        raise ValueError("TS must return one of the five relation categories.")
+    if result["topic"] not in (OLD_TOPIC, NEW_TOPIC):
+        raise ValueError("TS must return old_topic or new_topic.")
     if type(result.get("needs_clarification")) is not bool or not isinstance(result.get("reason"), str):
         raise ValueError("TS must provide needs_clarification (boolean) and reason (string).")
-    # Compatibility metadata only: the model makes one five-way decision.
-    result["topic"] = "new_topic" if relation == NEW_TOPIC else "old_topic"
-    return {key: result[key] for key in ("topic", "relation", "needs_clarification", "reason")}
+    # Compatibility field only, not a second classification.
+    return {"topic": result["topic"], "relation": result["topic"],
+            "needs_clarification": result["needs_clarification"], "reason": result["reason"]}
 
 
-def relation_hint(relation):
-    return "" if relation is None else f"\n### Relation\n{relation}: {RELATIONS[relation]}\n"
-
-
-def disambiguate(history, question, relation, generate):
+def disambiguate(history, question, generate):
     prompt = PROMPT_DICT["explain_question"] + GROUNDING + "\n\n" + PRESERVE_CONTEXT
     prompt += context(history, question).replace("### Question\n", "### Ambiguous Question\n", 1)
-    prompt += relation_hint(relation)
     result = generate(prompt)
     if not isinstance(result, str) or not result.strip():
         raise ValueError("QD returned an empty question.")

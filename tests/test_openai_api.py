@@ -38,7 +38,7 @@ class OpenAIIntegrationTests(unittest.TestCase):
 
     def test_real_sdk_serializes_multiturn_requests_without_changing_prompts(self):
         outputs = iter([
-            json.dumps({"relation":"Participant Shift",
+            json.dumps({"topic":"old_topic",
                         "needs_clarification":False, "reason":"Line changed"}),
             "C2라인 불량률", '{"query":"C2라인 불량률"}',
         ])
@@ -60,7 +60,7 @@ class OpenAIIntegrationTests(unittest.TestCase):
             self.assertIs(body["store"], False)
             self.assertNotIn("previous_response_id", body)
         self.assertIn("C1라인 불량률", bodies[0]["input"])
-        self.assertIn("Participant Shift", bodies[1]["input"])
+        self.assertNotIn("### Relation", bodies[1]["input"])
 
     def test_env_and_explicit_model_override_file(self):
         def explicit_handler(request):

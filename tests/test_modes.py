@@ -18,8 +18,8 @@ class ModesTests(unittest.TestCase):
 
     def generate(self, prompt):
         self.prompts.append(prompt)
-        if "classify the relation" in prompt:
-            return json.dumps({"relation": "Participant Shift",
+        if "Classify it as either" in prompt:
+            return json.dumps({"topic": "old_topic",
                                "needs_clarification": False, "reason": "대상 변경"})
         if "### Ambiguous Question" in prompt:
             return "C2라인 불량률"
@@ -58,7 +58,7 @@ class ModesTests(unittest.TestCase):
         self.assertEqual(len(self.prompts), 3)
 
     def test_interactive_retry_after_api_error(self):
-        outputs = iter([RuntimeError("API error"), json.dumps({"relation": "Participant Shift", "needs_clarification": False, "reason": "대상 변경"}), "복원 질문", '{"query":"성공"}'])
+        outputs = iter([RuntimeError("API error"), json.dumps({"topic": "old_topic", "needs_clarification": False, "reason": "대상 변경"}), "복원 질문", '{"query":"성공"}'])
         def generate(prompt):
             value = next(outputs)
             if isinstance(value, Exception):
@@ -75,11 +75,11 @@ class ModesTests(unittest.TestCase):
 
     def test_new_topic_starts_next_conversation_at_turn_one(self):
         outputs = iter([
-            json.dumps({"relation": "Constraint Refinement", "needs_clarification": False, "reason": "조건 변경"}),
+            json.dumps({"topic": "old_topic", "needs_clarification": False, "reason": "조건 변경"}),
             "조건 복원", '{"query":"조건 재작성"}',
-            json.dumps({"relation": "New Topic", "needs_clarification": False, "reason": "새 주제"}),
+            json.dumps({"topic": "new_topic", "needs_clarification": False, "reason": "새 주제"}),
             '{"query":"UPH 질문"}',
-            json.dumps({"relation": "Participant Shift", "needs_clarification": False, "reason": "대상 변경"}),
+            json.dumps({"topic": "old_topic", "needs_clarification": False, "reason": "대상 변경"}),
             "후속 복원", '{"query":"후속 재작성"}',
         ])
         writer = ResultWriter(self.root / "numbering.json")

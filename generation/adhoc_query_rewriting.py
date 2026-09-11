@@ -8,12 +8,12 @@ from datetime import datetime
 try:
     from .enhancement_generation import (
         GROUNDING, PROMPT_DICT, PRESERVE_CONTEXT, NEW_TOPIC, classify_relation, context, disambiguate,
-        parse_json, relation_hint, validate_questions,
+        parse_json, validate_questions,
     )
 except ImportError:
     from enhancement_generation import (
         GROUNDING, PROMPT_DICT, PRESERVE_CONTEXT, NEW_TOPIC, classify_relation, context, disambiguate,
-        parse_json, relation_hint, validate_questions,
+        parse_json, validate_questions,
     )
 
 
@@ -27,10 +27,9 @@ def rewrite_question(history, question, generate):
     if classification["needs_clarification"]:
         return {**result, "status": "needs_clarification", "disambiguated_question": None, "query": None}
     active_history = history if classification["topic"] == "old_topic" else []
-    clarified = disambiguate(active_history, question, classification["relation"], generate) if active_history else question
+    clarified = disambiguate(active_history, question, generate) if active_history else question
     prompt = PROMPT_DICT["search_query"] + GROUNDING + "\n\n" + PRESERVE_CONTEXT + context(active_history, question)
     prompt += "\n### Disambiguated Question\n" + clarified
-    prompt += relation_hint(classification["relation"])
     rewritten = parse_json(generate(prompt))
     if not isinstance(rewritten.get("query"), str) or not rewritten["query"].strip():
         raise ValueError("Rewriter must return a non-empty query string.")
@@ -146,8 +145,7 @@ def ask_turn(session, question, conversation_id, turn):
 def display_result(row):
     print(f"\n[{row['conversation_id']} / 턴 {row['turn']}]")
     print(f"입력: {row['question']}")
-    label = "New Topic (이전 흐름 아님)" if row["relation"] == NEW_TOPIC else row["relation"]
-    print(f"관계: {label}")
+    print(f"Topic: {row['topic']}")
     if row["status"] == "needs_clarification":
         print(f"확인 필요: {row['reason']}")
     else:
@@ -194,7 +192,7 @@ def run_interactive(generate, writer):
         except (ValueError, RuntimeError) as exc:
             print(f"처리 실패: {exc}\n대화는 유지됩니다. 다시 입력하세요.")
             continue
-        if turn > 0 and row["status"] == "ok" and row["relation"] == NEW_TOPIC:
+        if turn > 0 and row["status"] == "ok" and row["topic"] == NEW_TOPIC:
             conversation += 1
             turn = 0
         turn += 1
