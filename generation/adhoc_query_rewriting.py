@@ -146,7 +146,8 @@ def ask_turn(session, question, conversation_id, turn):
 def display_result(row):
     print(f"\n[{row['conversation_id']} / 턴 {row['turn']}]")
     print(f"입력: {row['question']}")
-    label = "New Topic (이전 흐름 아님)" if row["relation"] == NEW_TOPIC else row["relation"]
+    label = ("New Topic (이전 흐름 아님)" if row["relation"] == NEW_TOPIC
+             else f"Old Topic ({row['relation']})")
     print(f"관계: {label}")
     if row["status"] == "needs_clarification":
         print(f"확인 필요: {row['reason']}")

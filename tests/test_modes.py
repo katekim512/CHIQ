@@ -51,6 +51,7 @@ class ModesTests(unittest.TestCase):
         self.assertEqual([row["turn"] for row in rows], [1, 2, 1])
         self.assertEqual(rows[-1]["history_questions"], [])
         self.assertIn("Queryrewriting:", screen.getvalue())
+        self.assertIn("관계: Old Topic (Participant Shift)", screen.getvalue())
         self.assertNotIn("최종 재작성:", screen.getvalue())
         self.assertNotIn("생략 복원:", screen.getvalue())
         self.assertEqual(rows[0]["query"], "C1라인 불량률")
